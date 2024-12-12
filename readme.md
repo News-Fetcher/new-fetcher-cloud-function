@@ -198,8 +198,7 @@ This project is licensed under the [MIT License](LICENSE).
 
 For any questions, suggestions, or feedback, please reach out to us:
 
-- **Email**: [your-email@example.com](mailto:your-email@example.com)
-- **GitHub**: [https://github.com/your-username/news-fetcher-platform](https://github.com/your-username/news-fetcher-platform)
+- **Email**: [cjt807916@gmail.com](mailto:cjt807916@gmail.com)
 
 ## Acknowledgements
 
