@@ -1,0 +1,5 @@
+node_modules/
+*.local
+serviceAccountKey.json
+firebase-debug.log
+.env
