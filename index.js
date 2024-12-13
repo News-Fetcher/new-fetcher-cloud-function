@@ -20,7 +20,7 @@ const serviceAccountPath = path.join(__dirname, './serviceAccountKey.json');
 
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN; // 从环境变量中获取
 
-const REPO_OWNER = "nagisa77";
+const REPO_OWNER = "News-Fetcher";
 const REPO_NAME = "news-fetcher";
 const WORKFLOW_ID = "python-app.yml";
 
@@ -175,18 +175,20 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
       return res.status(405).send("Method Not Allowed. Use POST.");
     }
 
-    const { news_websites_scraping } = req.body;
+    const { news_websites_scraping, email } = req.body;
 
-    if (!news_websites_scraping) {
-      logger.warn("Missing news_websites_scraping in request body.");
-      return res.status(400).send("Bad Request: news_websites_scraping is required.");
+    if (!news_websites_scraping || !email) {
+      logger.warn("Missing news_websites_scraping or email in request body.");
+      return res.status(400).send("Bad Request: news_websites_scraping or email is required.");
     }
-
-    logger.info("news_websites_scraping:", news_websites_scraping);
 
     try {
       // 将 JSON 配置字符串化
-      const scrapingConfigStr = JSON.stringify(news_websites_scraping);
+      const scraping_config_str = JSON.stringify(news_websites_scraping);
+      const email_config_str = JSON.stringify(email);
+
+      logger.info("scraping_config_str:", scraping_config_str);
+      logger.info("email_config_str:", email_config_str);
 
       // 触发 GitHub Actions 工作流
       if (!GITHUB_TOKEN) {
@@ -200,7 +202,8 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
       const payload = {
         ref: "feature/json_scraping", 
         inputs: {
-          scraping_config: scrapingConfigStr, 
+          scraping_config: scraping_config_str, 
+          email: email_config_str,
         },
       };
 
