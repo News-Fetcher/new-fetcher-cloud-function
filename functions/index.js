@@ -113,6 +113,50 @@ export const getBlogList = onRequest((req, res) => {
   });
 });
 
+export const getActionDetail = onRequest(async (req, res) => {
+  logger.info("Received request to get GitHub action details.");
+  
+  // Fetch GitHub token from environment variable (ensure it's set in your environment)
+  const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+
+  // GitHub API URL for fetching action runs
+  const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/runs`;
+  
+  // GitHub Authorization Header
+  const headers = {
+    "Authorization": `Bearer ${GITHUB_TOKEN}`
+  };
+
+  try {
+    const response = await axios.get(url, { headers });
+    // Handle the response from GitHub API
+    logger.info("GitHub Action Details retrieved successfully.");
+
+    const ref = database.ref("actions");
+    const snapshot = await ref.get();
+    if (!snapshot.exists()) {
+      logger.warn("No actions found in the database.");
+      return res.status(404).send("No actions found.");
+    }
+    const running_actions = snapshot.val();
+    logger.info("actions:", running_actions); 
+
+    const firstTenActions = response.data.workflow_runs.slice(0, 10).map(action => ({
+      id: action.id,
+      created_at: action.created_at,
+      name: running_actions[action.id] ? running_actions[action.id] : action.name,
+      status: action.status,
+    }));
+    logger.info(`Retrieved first 10 action runs:`, firstTenActions);
+
+    res.status(200).json(firstTenActions); 
+  } catch (error) {
+    // Handle errors if the request fails
+    logger.error("Error fetching GitHub Action Details:", error);
+    res.status(500).send("Error fetching GitHub Action Details");
+  }
+});
+
 export const downloadFile = onRequest((req, res) => {
   logger.info("Received request to download file.");
   corsMiddleware(req, res, async () => {
@@ -233,6 +277,31 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
           Accept: "application/vnd.github.v3+json",
         },
       });
+
+      // todo: 单纯等待对于并发任务会出现命名混淆，希望借助其他方法确认id信息
+      await new Promise(resolve => setTimeout(resolve, 10000));
+
+      // GitHub API URL for fetching action runs
+      const action_url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/runs`;
+
+      // GitHub Authorization Header
+      const headers = {
+        "Authorization": `Bearer ${GITHUB_TOKEN}`
+      };
+      const action_response = await axios.get(action_url, { headers });
+
+      logger.info("action_response:", action_response.data);
+      const action_data = action_response.data;
+      const first_response = action_data.workflow_runs[0];
+      logger.info("first_response:", first_response);
+
+      const ref = database.ref("actions");
+      const snapshot = await ref.get();
+      let actions = snapshot.exists() ? snapshot.val() : {}; 
+
+      actions[first_response.id] = `${email} triggered event`; 
+      ref.set(actions);
+      logger.info("actions:", actions);
 
       if (response.status === 204) {
         logger.info("GitHub Actions workflow triggered successfully.");
