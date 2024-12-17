@@ -83,6 +83,8 @@ export const getBlogList = onRequest((req, res) => {
         description: item.description,
         filename: `${item.sha256}.mp3`,
         img_url: item.img_url ? item.img_url : defaultImageUrl,
+        date: item.date,
+        tags: item.tags,
       }));
 
       logger.info(`Successfully fetched ${fileList.length} podcasts.`);
