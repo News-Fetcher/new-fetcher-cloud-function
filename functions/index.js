@@ -41,6 +41,23 @@ if (!admin.apps.length) {
 const database = admin.database();
 const storage = admin.storage();
 
+export const getTags = onRequest((req, res) => {
+  logger.info("Received request to get tags.");
+  corsMiddleware(req, res, async () => {
+    const ref = database.ref("podcasts");
+    const snapshot = await ref.get();
+    if (!snapshot.exists()) {
+      logger.warn("No podcasts found in the database.");
+      return res.status(404).send("No podcasts found.");
+    }
+    
+    const podcasts = snapshot.val();
+    const tags = podcasts.map(podcast => podcast.tags).flat();
+    const uniqueTags = [...new Set(tags)];
+    res.status(200).json(uniqueTags);
+  });
+});
+
 // 获取博客列表
 export const getBlogList = onRequest((req, res) => {
   logger.info("Received request to get blog list.");
