@@ -50,7 +50,7 @@ export const getTags = onRequest((req, res) => {
       logger.warn("No podcasts found in the database.");
       return res.status(404).send("No podcasts found.");
     }
-    
+
     const podcasts = snapshot.val();
     const tags = podcasts.map(podcast => podcast.tags).flat();
     const uniqueTags = [...new Set(tags)];
@@ -114,47 +114,49 @@ export const getBlogList = onRequest((req, res) => {
 });
 
 export const getActionDetail = onRequest(async (req, res) => {
-  logger.info("Received request to get GitHub action details.");
-  
-  // Fetch GitHub token from environment variable (ensure it's set in your environment)
-  const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
+  corsMiddleware(req, res, async () => {
+    logger.info("Received request to get GitHub action details.");
 
-  // GitHub API URL for fetching action runs
-  const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/runs`;
-  
-  // GitHub Authorization Header
-  const headers = {
-    "Authorization": `Bearer ${GITHUB_TOKEN}`
-  };
+    // Fetch GitHub token from environment variable (ensure it's set in your environment)
+    const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 
-  try {
-    const response = await axios.get(url, { headers });
-    // Handle the response from GitHub API
-    logger.info("GitHub Action Details retrieved successfully.");
+    // GitHub API URL for fetching action runs
+    const url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/runs`;
 
-    const ref = database.ref("actions");
-    const snapshot = await ref.get();
-    if (!snapshot.exists()) {
-      logger.warn("No actions found in the database.");
-      return res.status(404).send("No actions found.");
+    // GitHub Authorization Header
+    const headers = {
+      "Authorization": `Bearer ${GITHUB_TOKEN}`
+    };
+
+    try {
+      const response = await axios.get(url, { headers });
+      // Handle the response from GitHub API
+      logger.info("GitHub Action Details retrieved successfully.");
+
+      const ref = database.ref("actions");
+      const snapshot = await ref.get();
+      if (!snapshot.exists()) {
+        logger.warn("No actions found in the database.");
+        return res.status(404).send("No actions found.");
+      }
+      const running_actions = snapshot.val();
+      logger.info("actions:", running_actions);
+
+      const firstTenActions = response.data.workflow_runs.slice(0, 10).map(action => ({
+        id: action.id,
+        created_at: action.created_at,
+        name: running_actions[action.id] ? running_actions[action.id] : action.name,
+        status: action.status,
+      }));
+      logger.info(`Retrieved first 10 action runs:`, firstTenActions);
+
+      res.status(200).json(firstTenActions);
+    } catch (error) {
+      // Handle errors if the request fails
+      logger.error("Error fetching GitHub Action Details:", error);
+      res.status(500).send("Error fetching GitHub Action Details");
     }
-    const running_actions = snapshot.val();
-    logger.info("actions:", running_actions); 
-
-    const firstTenActions = response.data.workflow_runs.slice(0, 10).map(action => ({
-      id: action.id,
-      created_at: action.created_at,
-      name: running_actions[action.id] ? running_actions[action.id] : action.name,
-      status: action.status,
-    }));
-    logger.info(`Retrieved first 10 action runs:`, firstTenActions);
-
-    res.status(200).json(firstTenActions); 
-  } catch (error) {
-    // Handle errors if the request fails
-    logger.error("Error fetching GitHub Action Details:", error);
-    res.status(500).send("Error fetching GitHub Action Details");
-  }
+  });
 });
 
 export const downloadFile = onRequest((req, res) => {
@@ -231,6 +233,8 @@ export const downloadFile = onRequest((req, res) => {
 // 触发 GitHub Actions 工作流的函数
 export const triggerPodcastGeneration = onRequest(async (req, res) => {
   logger.info("Received request to trigger podcast generation.");
+  const allowedMethods = ["scraping", "crawling"]; 
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
   corsMiddleware(req, res, async () => {
     if (req.method !== "POST") {
@@ -238,20 +242,38 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
       return res.status(405).send("Method Not Allowed. Use POST.");
     }
 
-    const { news_websites_scraping, email } = req.body;
+    const {
+      news_websites_scraping,
+      email,
+      method,
+      be_concise,
+    } = req.body;
 
     if (!news_websites_scraping || !email) {
       logger.warn("Missing news_websites_scraping or email in request body.");
-      return res.status(400).send("Bad Request: news_websites_scraping or email is required.");
+      return res.status(400).send("Bad Request: news_websites_scraping and email are required.");
+    }
+
+    // 校验 email 格式
+    if (!emailRegex.test(email)) {
+      logger.warn(`Invalid email format: ${email}`);
+      return res.status(400).send("Bad Request: Invalid email format.");
+    }
+
+    // 校验 method 字段（如果 method 非必需，可在此加入判断 method 是否存在）
+    if (method && !allowedMethods.includes(method)) {
+      logger.warn(`Invalid method: ${method}. Allowed methods are: ${allowedMethods.join(", ")}.`);
+      return res.status(400).send("Bad Request: Invalid method.");
     }
 
     try {
       // 将 JSON 配置字符串化
       const scraping_config_str = JSON.stringify(news_websites_scraping);
-      const email_config_str = JSON.stringify(email);
 
       logger.info("scraping_config_str:", scraping_config_str);
-      logger.info("email_config_str:", email_config_str);
+      logger.info("email:", email);
+      logger.info("method:", method);
+      logger.info("be_concise:", be_concise);
 
       // 触发 GitHub Actions 工作流
       if (!GITHUB_TOKEN) {
@@ -263,10 +285,12 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
       const githubApiUrl = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/dispatches`;
 
       const payload = {
-        ref: "feature/json_scraping", 
+        ref: "master",
         inputs: {
-          scraping_config: scraping_config_str, 
-          email: email_config_str,
+          scraping_config: scraping_config_str,
+          email: email,
+          method: method,
+          be_concise: be_concise,
         },
       };
 
@@ -279,7 +303,7 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
       });
 
       // todo: 单纯等待对于并发任务会出现命名混淆，希望借助其他方法确认id信息
-      await new Promise(resolve => setTimeout(resolve, 10000));
+      await new Promise(resolve => setTimeout(resolve, 3000));
 
       // GitHub API URL for fetching action runs
       const action_url = `https://api.github.com/repos/${REPO_OWNER}/${REPO_NAME}/actions/workflows/${WORKFLOW_ID}/runs`;
@@ -297,9 +321,9 @@ export const triggerPodcastGeneration = onRequest(async (req, res) => {
 
       const ref = database.ref("actions");
       const snapshot = await ref.get();
-      let actions = snapshot.exists() ? snapshot.val() : {}; 
+      let actions = snapshot.exists() ? snapshot.val() : {};
 
-      actions[first_response.id] = `${email} triggered event`; 
+      actions[first_response.id] = `${email} triggered event`;
       ref.set(actions);
       logger.info("actions:", actions);
 
