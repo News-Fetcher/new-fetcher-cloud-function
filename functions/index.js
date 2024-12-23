@@ -102,6 +102,7 @@ export const getBlogList = onRequest((req, res) => {
         img_url: item.img_url ? item.img_url : defaultImageUrl,
         date: item.date,
         tags: item.tags,
+        total_duration: item.total_duration,
       }));
 
       logger.info(`Successfully fetched ${fileList.length} podcasts.`);
