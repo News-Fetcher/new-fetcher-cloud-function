@@ -95,7 +95,7 @@ export const getBlogList = onRequest((req, res) => {
       const defaultImageUrl = await getDefaultImageUrl();
 
       // Map the podcasts to include img_url
-      const fileList = podcasts.map((item) => ({
+      let fileList = podcasts.map((item) => ({
         title: item.title,
         description: item.description,
         filename: `${item.sha256}.mp3`,
@@ -104,6 +104,15 @@ export const getBlogList = onRequest((req, res) => {
         tags: item.tags,
         total_duration: item.total_duration,
       }));
+
+      // Optional pagination
+      let { page, pageSize } = req.query;
+      page = parseInt(page);
+      pageSize = parseInt(pageSize);
+      if (!isNaN(page) && !isNaN(pageSize) && page > 0 && pageSize > 0) {
+        const start = (page - 1) * pageSize;
+        fileList = fileList.slice(start, start + pageSize);
+      }
 
       logger.info(`Successfully fetched ${fileList.length} podcasts.`);
       res.status(200).json(fileList);
