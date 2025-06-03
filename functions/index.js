@@ -105,6 +105,11 @@ export const getBlogList = onRequest((req, res) => {
         total_duration: item.total_duration,
       }));
 
+      // 按照日期降序排序
+      fileList.sort((a, b) => {
+        return new Date(b.date) - new Date(a.date);
+      });
+
       // Optional pagination
       let { page, pageSize } = req.query;
       page = parseInt(page);
